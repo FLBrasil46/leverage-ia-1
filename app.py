@@ -1,6 +1,6 @@
 import os
 import finnhub
-from flask import Flask, request
+from flask import Flask
 from datetime import datetime
 
 app = Flask(__name__)
@@ -11,33 +11,33 @@ ATIVOS = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "JNJ", "PG", "KO", "PFE", "NV
 
 @app.route("/")
 def index():
-    filtro = request.args.get("q", "").upper()
     hoje = datetime.today().strftime("%Y-%m-%d")
-
     all_rows = ""
-    for t in ATIVOS:
+
+    for ticker in ATIVOS:
         try:
-            divs = client.stock_dividends(t, _from=hoje)
-            for d in divs:
-                ex = d.get('exDate', '—')
-                pay = d.get('paymentDate', '—')
+            dividendos = client.stock_dividends(ticker, _from=hoje)
+            for d in dividendos:
+                ex_date = d.get('exDate', '—')
+                payment_date = d.get('paymentDate', '—')
                 amount = d.get('amount', 0)
-                if not filtro or filtro in t:
-                    all_rows += f"<tr><td>{t}</td><td>{ex}</td><td>{pay}</td><td>{amount:.4f}</td></tr>"
+                all_rows += f"<tr><td>{ticker}</td><td>{ex_date}</td><td>{payment_date}</td><td>{amount:.4f}</td></tr>"
         except Exception as e:
-            print(f"Erro ao consultar {t}: {e}")
+            print(f"Erro ao consultar {ticker}: {e}")
 
     html = f"""
     <html><head><meta charset="utf-8"><title>Leverage IA – Dividendos EUA</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"></head>
-    <body class="p-4"><h1>Dividendos EUA (Futuros)</h1>
-    <form><input name="q" placeholder="Filtrar ticker" value="{filtro}"><button>Buscar</button></form>
-    <table class="table table-striped mt-3"><thead><tr>
-    <th>Ativo</th><th>Data Ex</th><th>Pagamento</th><th>Valor</th></tr></thead><tbody>
-    {all_rows or "<tr><td colspan='4'>Nenhum dividendo encontrado</td></tr>"}
-    </tbody></table>
-    <p class="text-muted">Dados via <a href="https://finnhub.io">Finnhub</a>.</p></body></html>"""
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head><body class="p-4">
+    <h1>Dividendos previstos (EUA)</h1>
+    <table class="table table-bordered table-striped mt-3">
+    <thead><tr><th>Ativo</th><th>Data Ex</th><th>Data Pagamento</th><th>Valor</th></tr></thead>
+    <tbody>{all_rows or '<tr><td colspan="4">Nenhum dividendo encontrado.</td></tr>'}</tbody>
+    </table>
+    <p class="text-muted">Dados fornecidos por <a href="https://finnhub.io">Finnhub</a>.</p>
+    </body></html>
+    """
     return html
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",5000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
