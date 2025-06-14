@@ -1,51 +1,63 @@
 import os
-from flask import Flask, request
 import requests
+from flask import Flask, request
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
-
-API_KEY = os.environ.get("TD_APIKEY", "")
+API_KEY = os.getenv("TD_APIKEY", "")  # defina no Render
 BASE = "https://api.twelvedata.com"
+ATIVOS = ["AAPL", "MSFT", "GOOGL", "TSLA", "AMZN"]
 
-ATIVOS = ["ITSA4.BVMF", "BBAS3.BVMF", "TAEE11.BVMF"]
-
-def fetch_dividends_calendar(start, end):
-    url = f"{BASE}/dividends_calendar?exchange=BVMF&start_date={start}&end_date={end}&apikey={API_KEY}"
+def fetch_us_dividends(start, end):
+    url = (f"{BASE}/dividends_calendar?"
+           f"start_date={start}&end_date={end}&apikey={API_KEY}")
     try:
-        resp = requests.get(url, timeout=5)
-        return resp.json().get("dividends", [])
+        r = requests.get(url)
+        data = r.json()
+        return data.get("dividends", []) if "dividends" in data else []
     except Exception as e:
-        print("Erro na API:", e)
+        print(f"Erro na API: {e}")
         return []
 
 @app.route("/")
 def index():
     hoje = datetime.today().date()
     fim = hoje + timedelta(days=15)
-    divs = fetch_dividends_calendar(hoje.isoformat(), fim.isoformat())
+    filtro = request.args.get("q", "").upper()
 
-    ticker = request.args.get("q", "").upper()
-    if ticker:
-        divs = [d for d in divs if d["symbol"].startswith(ticker)]
+    dividendos = fetch_us_dividends(hoje.isoformat(), fim.isoformat())
 
-    html = """
-    <html><head><meta charset="utf-8"><title>Leverage IA - Proventos</title></head>
-    <body style="font-family:sans-serif;padding:20px">
-      <h1>Próximos proventos (15 dias)</h1>
-      <form><input name="q" placeholder="Ativo (ex: ITSA4)" value="{t}"><button>Filtrar</button></form>
-      <table border="1" cellpadding="5" style="border-collapse:collapse;margin-top:20px;">
-        <tr><th>Ativo</th><th>Data</th><th>Valor</th></tr>
-    """.format(t=ticker)
-
-    if divs:
-        for d in divs:
-            if d["symbol"] in ATIVOS:
-                html += f"<tr><td>{d['symbol']}</td><td>{d['ex_date']}</td><td>{d['dividend']}</td></tr>"
+    # Filtro simples
+    if filtro:
+        dividendos = [d for d in dividendos if filtro in d['symbol']]
     else:
-        html += "<tr><td colspan='3'>Nenhum provento encontrado</td></tr>"
+        dividendos = [d for d in dividendos if d['symbol'] in ATIVOS]
 
-    html += "</table></body></html>"
+    rows = "".join(
+        f"<tr><td>{d['symbol']}</td><td>{d['ex_date']}</td><td>{d['dividend']}</td></tr>"
+        for d in dividendos
+    )
+
+    html = f"""
+    <html><head><meta charset="utf-8"><title>Proventos EUA</title></head>
+    <body style="font-family: sans-serif; padding: 20px;">
+        <h1>Dividendos próximos 15 dias (EUA)</h1>
+        <form>
+            <input name="q" placeholder="Buscar ativo..." value="{filtro}">
+            <button>Buscar</button>
+        </form>
+        <table border="1" cellpadding="5" style="margin-top: 20px; border-collapse: collapse;">
+            <tr><th>Ativo</th><th>Data Ex</th><th>Valor</th></tr>
+            {rows if rows else "<tr><td colspan='3'>Sem dados</td></tr>"}
+        </table>
+    </body></html>
+    """
+    return html
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
     return html
 
 if __name__ == "__main__":
