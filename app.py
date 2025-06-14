@@ -1,79 +1,55 @@
 import os
 import requests
 from flask import Flask, request
+from datetime import datetime, timedelta
 import json
 
 app = Flask(__name__)
-
 TD_APIKEY = os.environ.get("TD_APIKEY", "")
 
-def fetch_us_dividends(symbol):
-    url = f"https://api.twelvedata.com/dividends?symbol={symbol}&apikey={TD_APIKEY}"
+ATIVOS_USA = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "JNJ", "PG", "KO", "PFE", "NVDA"]
+
+def fetch_dividends(ticker):
+    url = f"https://api.twelvedata.com/dividends?symbol={ticker}&apikey={TD_APIKEY}"
     try:
-        response = requests.get(url)
-        return response.json()
+        res = requests.get(url)
+        return res.json().get("dividends", [])
     except Exception as e:
-        return {"error": str(e)}
+        print(f"Erro ao buscar {ticker}: {e}")
+        return []
 
 @app.route("/")
 def index():
-    symbol = request.args.get("q", "AAPL").upper()
-    data = fetch_us_dividends(symbol)
+    hoje = datetime.today()
+    fim = hoje + timedelta(days=90)
 
-    dividends = data.get("dividends", [])
-    rows = ""
-    labels = []
-    values = []
-
-    for d in dividends:
-        date = d.get("ex_date", "—")
-        amount = d.get("amount", 0)
-        rows += f"<tr><td>{date}</td><td>{amount}</td></tr>"
-        labels.append(f'"{date}"')
-        values.append(amount)
+    all_rows = ""
+    for ticker in ATIVOS_USA:
+        divs = fetch_dividends(ticker)
+        for d in divs:
+            try:
+                ex_date = datetime.strptime(d["ex_date"], "%Y-%m-%d")
+                if hoje <= ex_date <= fim:
+                    pay_date = d.get("pay_date", "—")
+                    amount = d.get("amount", 0)
+                    all_rows += f"<tr><td>{ticker}</td><td>{d['ex_date']}</td><td>{pay_date}</td><td>{amount}</td></tr>"
+            except:
+                continue
 
     html = f"""
-    <html><head><meta charset="utf-8"><title>LEVERAGE IA</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body {{ font-family: sans-serif; padding: 20px; }}
-        table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
-        th, td {{ border: 1px solid #ccc; padding: 8px; text-align: center; }}
-        th {{ background: #f0f0f0; }}
-    </style>
-    </head>
-    <body>
-        <h1>Dividendos - {symbol}</h1>
-        <form>
-            <input name="q" placeholder="Ticker americano" value="{symbol}">
-            <button type="submit">Buscar</button>
-        </form>
-        <table>
-            <tr><th>Data Ex</th><th>Valor</th></tr>
-            {rows if rows else "<tr><td colspan='2'>Sem dados</td></tr>"}
+    <html><head><meta charset="utf-8"><title>LEVERAGE IA - Dividendos</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    </head><body class="p-4">
+        <h1 class="mb-4">Dividendos Previstos (próximos 90 dias)</h1>
+        <table class="table table-striped table-bordered table-hover">
+            <thead class="table-dark">
+                <tr><th>Ticker</th><th>Data Ex</th><th>Pagamento</th><th>Valor</th></tr>
+            </thead>
+            <tbody>
+                {all_rows if all_rows else "<tr><td colspan='4'>Nenhum dividendo previsto</td></tr>"}
+            </tbody>
         </table>
-        <canvas id="grafico" width="600" height="200"></canvas>
-        <script>
-            new Chart(document.getElementById("grafico"), {{
-                type: "bar",
-                data: {{
-                    labels: [{','.join(labels)}],
-                    datasets: [{{
-                        label: "Dividendos",
-                        data: {json.dumps(values)},
-                        backgroundColor: "rgba(54, 162, 235, 0.6)"
-                    }}]
-                }},
-                options: {{
-                    responsive: true,
-                    scales: {{
-                        y: {{
-                            beginAtZero: true
-                        }}
-                    }}
-                }}
-            }});
-        </script>
+        <p class="text-muted">Dados fornecidos por Twelve Data para ativos dos EUA.</p>
     </body></html>
     """
     return html
