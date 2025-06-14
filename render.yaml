@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: leverage-ia
+    env: python
+    plan: free
+    buildCommand: ""
+    startCommand: python app.py
+    envVars:
+      - key: TD_APIKEY
+        value: SEU_TOKEN_TWELVE_DATA_AQUI
