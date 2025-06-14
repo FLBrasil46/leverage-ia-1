@@ -8,3 +8,4 @@ services:
     envVars:
       - key: TD_APIKEY
         value: SEU_TOKEN_TWELVE_DATA_AQUI
+
